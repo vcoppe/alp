@@ -38,21 +38,21 @@ pub struct AlpState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RunwayState {
-    /// The aircraft class scheduled the latest
-    pub prev_class: isize,
     /// The time of the latest aircraft scheduled
     pub prev_time: isize,
+    /// The aircraft class scheduled the latest
+    pub prev_class: isize,
 }
 
-struct AlpDecision {
-    aircraft: usize,
-    runway: usize,
+pub struct AlpDecision {
+    pub aircraft: usize,
+    pub runway: usize,
 }
 
 /// This structure describes a ALP instance
 #[derive(Debug, Clone)]
 pub struct Alp {
-    instance: AlpInstance,
+    pub instance: AlpInstance,
     next: Vec<Vec<usize>>, // The next aircraft to schedule for each class and for each remaining number of aircrafts
     min_separation_to: Vec<isize>,
 }
@@ -82,15 +82,15 @@ impl Alp {
         }
     }
 
-    fn get_arrival_time(&self, state: &AlpState, aircraft: usize, runway: usize) -> isize {
-        if state.info[runway].prev_time == -1 {
+    pub fn get_arrival_time(&self, info: &Vec<RunwayState>, aircraft: usize, runway: usize) -> isize {
+        if info[runway].prev_time == -1 {
             self.instance.target[aircraft]
-        } else if state.info[runway].prev_class == -1 {
+        } else if info[runway].prev_class == -1 {
             self.instance.target[aircraft]
-                .max(state.info[runway].prev_time + self.min_separation_to[self.instance.classes[aircraft]])
+                .max(info[runway].prev_time + self.min_separation_to[self.instance.classes[aircraft]])
         } else {
             self.instance.target[aircraft]
-                .max(state.info[runway].prev_time + self.instance.separation[state.info[runway].prev_class as usize][self.instance.classes[aircraft]])
+                .max(info[runway].prev_time + self.instance.separation[info[runway].prev_class as usize][self.instance.classes[aircraft]])
         }
     }
 
@@ -98,7 +98,7 @@ impl Alp {
         (decision.aircraft + self.instance.nb_aircrafts * decision.runway) as isize
     }
 
-    fn from_decision(&self, value: isize) -> AlpDecision {
+    pub fn from_decision(&self, value: isize) -> AlpDecision {
         AlpDecision {
             aircraft: value as usize % self.instance.nb_aircrafts,
             runway: value as usize / self.instance.nb_aircrafts,
@@ -141,7 +141,7 @@ impl Problem for Alp {
             next.rem[self.instance.classes[aircraft]] -= 1;
 
             next.info[runway].prev_class = self.instance.classes[aircraft] as isize;
-            next.info[runway].prev_time = self.get_arrival_time(state, aircraft, runway);
+            next.info[runway].prev_time = self.get_arrival_time(&state.info, aircraft, runway);
 
             next.info.sort_unstable();
             
@@ -154,7 +154,7 @@ impl Problem for Alp {
             0
         } else {
             let AlpDecision {aircraft, runway} = self.from_decision(decision.value);
-            - (self.get_arrival_time(state, aircraft, runway) - self.instance.target[aircraft])
+            - (self.get_arrival_time(&state.info, aircraft, runway) - self.instance.target[aircraft])
         }
     }
 
@@ -174,7 +174,11 @@ impl Problem for Alp {
                 let aircraft = self.next[k][rem];
 
                 for runway in 0..self.instance.nb_runways {
-                    let arrival = self.get_arrival_time(state, aircraft, runway);
+                    if runway > 0 && state.info[runway] == state.info[runway - 1] {
+                        continue;
+                    }
+
+                    let arrival = self.get_arrival_time(&state.info, aircraft, runway);
                     if arrival <= self.instance.latest[aircraft] {
                         f.apply(Decision {variable, value: self.to_decision(&AlpDecision { aircraft, runway }) });
 
@@ -240,7 +244,7 @@ impl Relaxation for AlpRelax {
             let mut feasible = false;
 
             for runway in 0..self.pb.instance.nb_runways {
-                let arrival = self.pb.get_arrival_time(state, aircraft, runway);
+                let arrival = self.pb.get_arrival_time(&state.info, aircraft, runway);
 
                 if arrival <= self.pb.instance.latest[aircraft] {
                     feasible = true;

@@ -31,7 +31,7 @@ pub struct AlpGenerator {
     #[clap(long, default_value="200")]
     max_separation_position: isize,
     /// The std deviation of the separation positions among a cluster
-    #[clap(long, default_value="20")]
+    #[clap(long, default_value="10")]
     separation_position_std_dev: isize,
     /// The average time between two aircraft arrivals
     #[clap(long, default_value="50")]
@@ -54,7 +54,7 @@ impl AlpGenerator {
         let classes = self.generate_classes(&mut rng);
         let separation = self.generate_separation_costs(&mut rng, &nb_classes_per_cluster);
         let target = self.generate_target(&mut rng);
-        let latest = self.generate_latest(&mut rng, &target);
+        let latest = self.generate_latest(&mut rng, &target, &classes);
 
         let instance = AlpInstance {
             nb_aircrafts: self.nb_aircrafts,
@@ -143,13 +143,21 @@ impl AlpGenerator {
         target
     }
 
-    fn generate_latest(&self, rng: &mut impl Rng, target: &Vec<isize>) -> Vec<isize> {
+    fn generate_latest(&self, rng: &mut impl Rng, target: &Vec<isize>, classes: &Vec<usize>) -> Vec<isize> {
         let mut latest = vec![];
+        let mut last = vec![0; self.nb_classes];
 
-        let rand = Uniform::new(5 * self.avg_interarrival_time, 25 * self.avg_interarrival_time);
+        let rand = Uniform::new(0, 10 * self.avg_interarrival_time);
 
         for i in 0..self.nb_aircrafts {
-            latest.push(target[i] + rand.sample(rng));
+            loop {
+                let end = target[i] + rand.sample(rng);
+                if end >= last[classes[i]] {
+                    latest.push(end);
+                    last[classes[i]] = end;
+                    break;
+                }
+            }
         }
 
         latest
