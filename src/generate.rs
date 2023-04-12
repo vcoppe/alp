@@ -137,7 +137,7 @@ impl AlpGenerator {
         let rand = Uniform::<f64>::new(0.0, 1.0);
 
         for i in 1..self.nb_aircrafts {
-            target.push(target[i - 1] +  (- rand.sample(rng).ln() * self.avg_interarrival_time as f64).round() as isize);
+            target.push(target[i - 1] +  (- rand.sample(rng).ln() * self.avg_interarrival_time as f64 / self.nb_runways as f64).round() as isize);
         }
 
         target
