@@ -195,18 +195,19 @@ impl Problem for Alp {
 }
 
 /// This structure implements the ALP relaxation
-pub struct AlpRelax {
+pub struct AlpRelax<'a> {
     pb: Alp,
+    compression_bound: Option<CompressedSolutionBound<'a, AlpState>>,
 }
 
-impl AlpRelax {
-    pub fn new(pb: Alp) -> Self {
+impl<'a> AlpRelax<'a> {
+    pub fn new(pb: Alp, compression_bound: Option<CompressedSolutionBound<'a, AlpState>>) -> Self {
 
-        Self { pb }
+        Self { pb, compression_bound }
     }
 }
 
-impl Relaxation for AlpRelax {
+impl<'a> Relaxation for AlpRelax<'a> {
     type State = AlpState;
 
     fn merge(&self, states: &mut dyn Iterator<Item = &Self::State>) -> Self::State {
@@ -255,6 +256,10 @@ impl Relaxation for AlpRelax {
             if !feasible {
                 return isize::MIN;
             }
+        }
+
+        if let Some(bound) = &self.compression_bound {
+            return bound.get_ub(state);
         }
 
         0
