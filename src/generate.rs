@@ -85,27 +85,30 @@ impl AlpGenerator {
             }
         }
 
-        let mut separation_costs = vec![vec![0; self.nb_classes]; self.nb_classes];
+        let mut separation_costs = vec![vec![-1; self.nb_classes]; self.nb_classes];
 
         let rand_centroid = Uniform::new_inclusive(self.min_separation_position, self.max_separation_position);
+        let rand_position = Normal::new(0.0, self.separation_position_std_dev as f64).expect("cannot create normal dist");
         for a in 0..self.nb_clusters {
             let centroid_a = rand_centroid.sample(rng);
-
-            let rand_position_a = Normal::new(centroid_a as f64, self.separation_position_std_dev as f64).expect("cannot create normal dist");
-            let positions_a = (0..nb_classes_per_cluster[a]).map(|_| rand_position_a.sample(rng).round() as isize).collect::<Vec<isize>>();
+            let positions_a = (0..nb_classes_per_cluster[a]).map(|_| centroid_a + rand_position.sample(rng).round() as isize).collect::<Vec<isize>>();
 
             for b in 0..self.nb_clusters {
                 if a == b {
                     for (i, ti) in members[a].iter().copied().enumerate() {
                         for (j, tj) in members[a].iter().copied().enumerate() {
-                            separation_costs[ti][tj] = positions_a[i].abs_diff(positions_a[j]) as isize;
+                            if ti == tj {
+                                while separation_costs[ti][tj] < 0 {
+                                    separation_costs[ti][tj] = self.separation_position_std_dev + rand_position.sample(rng).round() as isize;
+                                }
+                            } else {
+                                separation_costs[ti][tj] = positions_a[i].abs_diff(positions_a[j]) as isize;
+                            }
                         }
                     }
                 } else {
                     let centroid_b = rand_centroid.sample(rng);
-        
-                    let rand_position_b = Normal::new(centroid_b as f64, self.separation_position_std_dev as f64).expect("cannot create normal dist");
-                    let positions_b = (0..nb_classes_per_cluster[b]).map(|_| rand_position_b.sample(rng).round() as isize).collect::<Vec<isize>>();
+                    let positions_b = (0..nb_classes_per_cluster[b]).map(|_| centroid_b + rand_position.sample(rng).round() as isize).collect::<Vec<isize>>();
 
                     for (i, ti) in members[a].iter().copied().enumerate() {
                         for (j, tj) in members[b].iter().copied().enumerate() {
