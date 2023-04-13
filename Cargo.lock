@@ -9,7 +9,6 @@ dependencies = [
  "clap",
  "clustering 0.1.0 (git+https://github.com/vcoppe/clustering)",
  "ddo",
- "derivative",
  "rand",
  "rand_chacha",
  "rand_distr",

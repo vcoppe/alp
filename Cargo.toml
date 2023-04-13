@@ -15,4 +15,3 @@ serde_json     = "1.0"
 ddo            = { git = "https://github.com/vcoppe/ddo", branch = "compression" }
 smallbitset    = "0.5"
 clustering     = { git = "https://github.com/vcoppe/clustering" }
-derivative     = "2.2.0"
