@@ -21,22 +21,26 @@
 //! using ddo. It is a fairly simple example but it features most of the aspects you will
 //! want to copy when implementing your own solver.
 
-use std::vec;
+use std::{vec, collections::HashSet};
 
 use ddo::*;
+use derivative::Derivative;
 
 use crate::instance::AlpInstance;
 
 /// The state of the DP model
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Derivative)]
+#[derivative(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AlpState {
     /// The number of remaining aircrafts to schedule for each class
     pub rem: Vec<usize>,
     /// Info about the state of each runway
+    #[derivative(PartialEq="ignore",Hash="ignore")]
     pub info: Vec<RunwayState>,
+    info_sorted: Vec<RunwayState>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
 pub struct RunwayState {
     /// The time of the latest aircraft scheduled
     pub prev_time: isize,
@@ -123,6 +127,7 @@ impl Problem for Alp {
         AlpState {
             rem,
             info: vec![RunwayState {prev_class: -1, prev_time: -1}; self.instance.nb_runways],
+            info_sorted: vec![RunwayState {prev_class: -1, prev_time: -1}; self.instance.nb_runways],
         }
     }
 
@@ -136,16 +141,21 @@ impl Problem for Alp {
         } else {
             let AlpDecision {aircraft, runway} = self.from_decision(decision.value);
 
-            let mut next = state.clone();
+            let mut rem = state.rem.clone();
+            rem[self.instance.classes[aircraft]] -= 1;
 
-            next.rem[self.instance.classes[aircraft]] -= 1;
+            let mut info = state.info.clone();
+            info[runway].prev_class = self.instance.classes[aircraft] as isize;
+            info[runway].prev_time = self.get_arrival_time(&state.info, aircraft, runway);
 
-            next.info[runway].prev_class = self.instance.classes[aircraft] as isize;
-            next.info[runway].prev_time = self.get_arrival_time(&state.info, aircraft, runway);
-
-            next.info.sort_unstable();
+            let mut info_sorted = info.clone();
+            info_sorted.sort_unstable();
             
-            next
+            AlpState {
+                rem,
+                info,
+                info_sorted,
+            }
         }
     }
 
@@ -169,12 +179,13 @@ impl Problem for Alp {
 
     fn for_each_in_domain(&self, variable: ddo::Variable, state: &Self::State, f: &mut dyn ddo::DecisionCallback) {
         let mut one = false;
+        let mut used = HashSet::new();
         for (k, rem) in state.rem.iter().copied().enumerate() {
             if rem > 0 {
                 let aircraft = self.next[k][rem];
 
                 for runway in 0..self.instance.nb_runways {
-                    if runway > 0 && state.info[runway] == state.info[runway - 1] {
+                    if used.contains(&state.info[runway]) {
                         continue;
                     }
 
@@ -182,9 +193,12 @@ impl Problem for Alp {
                     if arrival <= self.instance.latest[aircraft] {
                         f.apply(Decision {variable, value: self.to_decision(&AlpDecision { aircraft, runway }) });
 
+                        used.insert(state.info[runway]);
                         one = true;
                     }
                 }
+
+                used.clear();
             }
         }
 
@@ -219,11 +233,13 @@ impl<'a> Relaxation for AlpRelax<'a> {
             info.iter_mut().enumerate().for_each(|(r,i)| i.prev_time = i.prev_time.min(s.info[r].prev_time));
         }
 
-        info.sort_unstable();
+        let mut info_sorted = info.clone();
+        info_sorted.sort_unstable();
 
         AlpState {
             rem,
             info,
+            info_sorted,
         }
     }
 
