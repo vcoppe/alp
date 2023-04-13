@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::{HashMap, BTreeSet, hash_map::Entry, HashSet}, mem::swap, ops::Bound::*};
 
 use clustering::{kmeans, Elem};
 use ddo::{Compression, Problem, Decision};
@@ -26,6 +26,7 @@ pub struct AlpCompression<'a> {
     pub problem: &'a Alp,
     pub meta_problem: Alp,
     pub membership: HashMap<isize, isize>,
+    pub states: HashMap<Vec<usize>, BTreeSet<Vec<RunwayState>>>,
 }
 
 impl<'a> AlpCompression<'a> {
@@ -59,10 +60,13 @@ impl<'a> AlpCompression<'a> {
         }
         membership.insert(-1, -1);
 
+        let states = Self::compute_meta_states(&meta_problem);
+
         AlpCompression {
             problem,
             meta_problem,
             membership,
+            states,
         }
     }
 
@@ -87,6 +91,38 @@ impl<'a> AlpCompression<'a> {
 
         meta_separation
     }
+
+    fn compute_meta_states(meta_pb: &Alp) -> HashMap<Vec<usize>, BTreeSet<Vec<RunwayState>>> {
+        let mut map: HashMap<Vec<usize>, BTreeSet<Vec<RunwayState>>> = HashMap::new();
+
+        let mut depth = 0;
+        let mut current = HashSet::new();
+        let mut next = HashSet::new();
+
+        current.insert(meta_pb.initial_state());
+
+        while let Some(var) = meta_pb.next_variable(depth, &mut current.iter()) {
+            for state in current.drain() {
+                match map.entry(state.rem.clone()) {
+                    Entry::Occupied(mut e) => {
+                        e.get_mut().insert(state.info.clone());
+                    },
+                    Entry::Vacant(e) => {
+                        let mut set = BTreeSet::new();
+                        set.insert(state.info.clone());
+                        e.insert(set);
+                    },
+                }
+
+                meta_pb.for_each_in_domain(var, &state, &mut |d| { next.insert(meta_pb.transition(&state, d)); });
+            }
+
+            swap(&mut current, &mut next);
+            depth += 1;
+        }
+
+        map
+    }
 }
 
 impl<'a> Compression for AlpCompression<'a> {
@@ -102,11 +138,21 @@ impl<'a> Compression for AlpCompression<'a> {
             rem[self.membership[&(c as isize)] as usize] += r;
         }
 
-        let info = state.info.iter().map(|s| RunwayState { prev_time: s.prev_time, prev_class: self.membership[&s.prev_class] }).collect();
-        
-        AlpState {
-            rem,
-            info,
+        let info = state.info.iter().map(|s| RunwayState { prev_time: s.prev_time, prev_class: self.membership[&s.prev_class] }).collect::<Vec<RunwayState>>();
+
+        match self.states.get(&rem) {
+            Some(infos) => {
+                match infos.range((Unbounded, Included(info))).last() {
+                    Some(precomputed_info) => {
+                        AlpState {
+                            rem,
+                            info: precomputed_info.clone(),
+                        }
+                    },
+                    None => AlpState { rem, info: vec![] },
+                }
+            },
+            None => AlpState { rem, info: vec![] },
         }
     }
 
