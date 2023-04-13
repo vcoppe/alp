@@ -42,26 +42,20 @@ impl Solve {
         println!("best value {best_value}");
 
         let mut runways = vec![(RunwayState {prev_time:-1, prev_class: -1}, vec![]); problem.instance.nb_runways];
-        let decisions = solver.best_solution().unwrap();
-        for decision in decisions {
-            if decision.value == -1 {
-                println!("missing decision");
-                continue;
+        if let Some(decisions) = solver.best_solution() {
+            for decision in decisions {
+                let AlpDecision { aircraft, runway } = problem.from_decision(decision.value);
+
+                let info = runways.iter().map(|r| r.0.clone()).collect();
+                let arrival = problem.get_arrival_time(&info, aircraft, runway);
+                runways[runway].0.prev_time = arrival;
+                runways[runway].0.prev_class = problem.instance.classes[aircraft] as isize;
+                runways[runway].1.push((arrival, aircraft));
             }
-
-            let AlpDecision { aircraft, runway } = problem.from_decision(decision.value);
-
-            let info = runways.iter().map(|r| r.0.clone()).collect();
-            let arrival = problem.get_arrival_time(&info, aircraft, runway);
-            runways[runway].0.prev_time = arrival;
-            runways[runway].0.prev_class = problem.instance.classes[aircraft] as isize;
-            runways[runway].1.push((arrival, aircraft));
-
-            runways.sort_unstable();
-        }
-        
-        for runway in runways {
-            println!("{:?}", runway.1);
+            
+            for runway in runways {
+                println!("{:?}", runway.1);
+            }
         }
     }
 }
