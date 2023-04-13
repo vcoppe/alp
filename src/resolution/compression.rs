@@ -102,11 +102,14 @@ impl<'a> Compression for AlpCompression<'a> {
             rem[self.membership[&(c as isize)] as usize] += r;
         }
 
-        let info = state.info.iter().map(|s| RunwayState { prev_time: s.prev_time, prev_class: self.membership[&s.prev_class] }).collect();
+        let info = state.info.iter().map(|s| RunwayState { prev_time: s.prev_time, prev_class: self.membership[&s.prev_class] }).collect::<Vec<RunwayState>>();
+        let mut info_sorted = info.clone();
+        info_sorted.sort_unstable();
         
         AlpState {
             rem,
             info,
+            info_sorted,
         }
     }
 

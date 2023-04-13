@@ -37,7 +37,7 @@ pub struct AlpState {
     /// Info about the state of each runway
     #[derivative(PartialEq="ignore",Hash="ignore")]
     pub info: Vec<RunwayState>,
-    info_sorted: Vec<RunwayState>,
+    pub info_sorted: Vec<RunwayState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Copy)]
@@ -275,7 +275,7 @@ impl<'a> Relaxation for AlpRelax<'a> {
         }
 
         if let Some(bound) = &self.compression_bound {
-            return bound.get_ub(state);
+            return bound.get_ub(state).min(0);
         }
 
         0

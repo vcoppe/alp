@@ -28,7 +28,7 @@ pub struct Solve {
     #[clap(long, default_value="1")]
     pub threads: usize,
     /// The number of class clusters
-    #[clap(short, long, default_value="5")]
+    #[clap(short, long, default_value="2")]
     pub n_meta_classes: usize,
     /// Whether to use the compression-based bound
     #[clap(short='b', long, action)]
