@@ -178,12 +178,13 @@ impl Problem for Alp {
     }
 
     fn for_each_in_domain(&self, variable: ddo::Variable, state: &Self::State, f: &mut dyn ddo::DecisionCallback) {
-        let mut one = false;
+        let mut tot_rem = 0;
         let mut used = HashSet::new();
         for (k, rem) in state.rem.iter().copied().enumerate() {
             if rem > 0 {
                 let aircraft = self.next[k][rem];
 
+                used.clear();
                 for runway in 0..self.instance.nb_runways {
                     if used.contains(&state.info[runway]) {
                         continue;
@@ -191,18 +192,16 @@ impl Problem for Alp {
 
                     let arrival = self.get_arrival_time(&state.info, aircraft, runway);
                     if arrival <= self.instance.latest[aircraft] {
-                        f.apply(Decision {variable, value: self.to_decision(&AlpDecision { aircraft, runway }) });
-
+                        f.apply(Decision { variable, value: self.to_decision(&AlpDecision { aircraft, runway }) });
                         used.insert(state.info[runway]);
-                        one = true;
                     }
                 }
-
-                used.clear();
             }
+
+            tot_rem += rem;
         }
 
-        if !one {
+        if tot_rem == 0 {
             f.apply(Decision {variable, value: -1 });
         }
     }
@@ -253,26 +252,7 @@ impl Relaxation for AlpRelax {
         cost
     }
 
-    fn fast_upper_bound(&self, state: &Self::State) -> isize {
-        for (k, rem) in state.rem.iter().copied().enumerate() {
-            let aircraft = self.pb.next[k][rem];
-            
-            let mut feasible = false;
-
-            for runway in 0..self.pb.instance.nb_runways {
-                let arrival = self.pb.get_arrival_time(&state.info, aircraft, runway);
-
-                if arrival <= self.pb.instance.latest[aircraft] {
-                    feasible = true;
-                    break;
-                }
-            }
-
-            if !feasible {
-                return isize::MIN;
-            }
-        }
-
+    fn fast_upper_bound(&self, _: &Self::State) -> isize {
         0
     }
 }
