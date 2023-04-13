@@ -28,13 +28,13 @@ pub struct AlpGenerator {
     #[clap(long, default_value="100")]
     min_separation_position: isize,
     /// The maximum separation position used to generate the pairwise minimum separation time
-    #[clap(long, default_value="200")]
+    #[clap(long, default_value="300")]
     max_separation_position: isize,
     /// The std deviation of the separation positions among a cluster
-    #[clap(long, default_value="10")]
+    #[clap(long, default_value="20")]
     separation_position_std_dev: isize,
     /// The average time between two aircraft arrivals
-    #[clap(long, default_value="50")]
+    #[clap(long, default_value="40")]
     avg_interarrival_time: isize,
     /// Name of the file where to generate the alp instance
     #[clap(short, long)]
