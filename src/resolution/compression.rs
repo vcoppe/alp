@@ -79,14 +79,8 @@ impl<'a> AlpCompression<'a> {
 
         for (i, a) in membership.iter().copied().enumerate() {
             for (j, b) in membership.iter().copied().enumerate() {
-                if a != b {
-                    meta_separation[a][b] = meta_separation[a][b].min(pb.instance.separation[i][j]);
-                }
+                meta_separation[a][b] = meta_separation[a][b].min(pb.instance.separation[i][j]);
             }
-        }
-
-        for i in 0..n_meta_classes {
-            meta_separation[i][i] = 0;
         }
 
         meta_separation
