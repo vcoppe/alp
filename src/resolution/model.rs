@@ -45,7 +45,7 @@ pub struct RunwayState {
 }
 
 pub struct AlpDecision {
-    pub aircraft: usize,
+    pub class: usize,
     pub runway: usize,
 }
 
@@ -53,7 +53,7 @@ pub struct AlpDecision {
 #[derive(Debug, Clone)]
 pub struct Alp {
     pub instance: AlpInstance,
-    next: Vec<Vec<usize>>, // The next aircraft to schedule for each class and for each remaining number of aircrafts
+    pub next: Vec<Vec<usize>>, // The next aircraft to schedule for each class and for each remaining number of aircrafts
     min_separation_to: Vec<isize>,
 }
 
@@ -94,14 +94,14 @@ impl Alp {
         }
     }
 
-    fn to_decision(&self, decision: &AlpDecision) -> isize {
-        (decision.aircraft + self.instance.nb_aircrafts * decision.runway) as isize
+    pub fn to_decision(&self, decision: &AlpDecision) -> isize {
+        (decision.class + self.instance.nb_classes * decision.runway) as isize
     }
 
     pub fn from_decision(&self, value: isize) -> AlpDecision {
         AlpDecision {
-            aircraft: value as usize % self.instance.nb_aircrafts,
-            runway: value as usize / self.instance.nb_aircrafts,
+            class: value as usize % self.instance.nb_classes,
+            runway: value as usize / self.instance.nb_classes,
         }
     }
 }
@@ -134,12 +134,15 @@ impl Problem for Alp {
         if decision.value == -1 {
             state.clone()
         } else {
-            let AlpDecision {aircraft, runway} = self.from_decision(decision.value);
+            let AlpDecision {class, runway} = self.from_decision(decision.value);
+            let aircraft = self.next[class][state.rem[class]];
 
             let mut next = state.clone();
             next.rem[self.instance.classes[aircraft]] -= 1;
-            next.info[runway].prev_class = self.instance.classes[aircraft] as isize;
+            next.info[runway].prev_class = class as isize;
             next.info[runway].prev_time = self.get_arrival_time(&state.info, aircraft, runway);
+
+            next.info.sort_unstable();
             
             next
         }
@@ -149,7 +152,8 @@ impl Problem for Alp {
         if decision.value == -1 {
             0
         } else {
-            let AlpDecision {aircraft, runway} = self.from_decision(decision.value);
+            let AlpDecision {class, runway} = self.from_decision(decision.value);
+            let aircraft = self.next[class][state.rem[class]];
             - (self.get_arrival_time(&state.info, aircraft, runway) - self.instance.target[aircraft])
         }
     }
@@ -166,9 +170,9 @@ impl Problem for Alp {
     fn for_each_in_domain(&self, variable: ddo::Variable, state: &Self::State, f: &mut dyn ddo::DecisionCallback) {
         let mut tot_rem = 0;
         let mut used = HashSet::new();
-        for (k, rem) in state.rem.iter().copied().enumerate() {
+        for (class, rem) in state.rem.iter().copied().enumerate() {
             if rem > 0 {
-                let aircraft = self.next[k][rem];
+                let aircraft = self.next[class][rem];
 
                 used.clear();
                 for runway in 0..self.instance.nb_runways {
@@ -178,7 +182,7 @@ impl Problem for Alp {
 
                     let arrival = self.get_arrival_time(&state.info, aircraft, runway);
                     if arrival <= self.instance.latest[aircraft] {
-                        f.apply(Decision { variable, value: self.to_decision(&AlpDecision { aircraft, runway }) });
+                        f.apply(Decision { variable, value: self.to_decision(&AlpDecision { class, runway }) });
                         used.insert(state.info[runway]);
                     }
                 }

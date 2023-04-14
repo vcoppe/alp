@@ -7,7 +7,7 @@ use std::hash::Hash;
 use clap::Args;
 use ddo::{FixedWidth, TimeBudget, NoDupFringe, MaxUB, ParBarrierSolverFc, Completion, Solver, CompressedSolutionBound, DecisionHeuristicBuilder, NoHeuristicBuilder, CompressedSolutionHeuristicBuilder, SimpleBarrier, HybridSolver, WidthHeuristic, Problem, Relaxation, StateRanking, Cutoff, Fringe};
 
-use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision, RunwayState};
+use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision};
 use crate::instance::AlpInstance;
 
 use super::compression::AlpCompression;
@@ -158,16 +158,15 @@ impl Solve {
 
         let best_value = best_value.map(|v| -v).unwrap_or(isize::MAX);
 
-        let mut runways = vec![(RunwayState {prev_time:-1, prev_class: -1}, vec![]); problem.instance.nb_runways];
+        let mut runways = vec![vec![]; problem.instance.nb_runways];
+        let mut cur = problem.initial_state();
         if let Some(decisions) = solver.best_solution() {
             for decision in decisions {
-                let AlpDecision { aircraft, runway } = problem.from_decision(decision.value);
-
-                let info = runways.iter().map(|r| r.0.clone()).collect();
-                let arrival = problem.get_arrival_time(&info, aircraft, runway);
-                runways[runway].0.prev_time = arrival;
-                runways[runway].0.prev_class = problem.instance.classes[aircraft] as isize;
-                runways[runway].1.push((arrival, aircraft));
+                let AlpDecision { class, runway } = problem.from_decision(decision.value);
+                let aircraft = problem.next[class][cur.rem[class]];
+                let arrival = problem.get_arrival_time(&cur.info, aircraft, runway);
+                runways[runway].push((arrival, aircraft));
+                cur = problem.transition(&cur, decision);
             }
         }
 
@@ -180,7 +179,7 @@ impl Solve {
         println!("best value : {best_value}");
         println!("duration   : {:.3} seconds", duration.as_secs_f32());
         for runway in runways {
-            println!("{:?}", runway.1);
+            println!("{:?}", runway);
         }
     }
 }
