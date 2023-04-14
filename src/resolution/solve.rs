@@ -76,7 +76,7 @@ fn get_relaxation<'a>(compressor: &'a AlpCompression, compression_bound: bool) -
 
 fn get_heuristic<'a>(compressor: &'a AlpCompression, compression_heuristic: bool) -> Box<dyn DecisionHeuristicBuilder<AlpState> + Send + Sync + 'a> {
     if compression_heuristic {
-        Box::new(CompressedSolutionHeuristicBuilder::new(compressor, &compressor.membership))
+        Box::new(CompressedSolutionHeuristicBuilder::new(compressor, &compressor.decision_membership))
     } else {
         Box::new(NoHeuristicBuilder::default())
     }

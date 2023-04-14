@@ -1,11 +1,11 @@
-use std::{collections::{HashMap, BTreeSet, hash_map::Entry, HashSet}, mem::swap, ops::Bound::*};
+use std::{collections::{HashMap, BTreeSet, hash_map::Entry, HashSet}, mem::swap, ops::Bound::*, vec};
 
 use clustering::{kmeans, Elem};
 use ddo::{Compression, Problem, Decision};
 
 use crate::instance::AlpInstance;
 
-use super::model::{Alp, AlpState, RunwayState};
+use super::model::{Alp, AlpState, RunwayState, AlpDecision};
 
 struct Item<'a> {
     id: usize,
@@ -25,8 +25,9 @@ impl<'a> Elem for Item<'a> {
 pub struct AlpCompression<'a> {
     pub problem: &'a Alp,
     pub meta_problem: Alp,
-    pub membership: HashMap<isize, isize>,
-    pub states: HashMap<Vec<usize>, BTreeSet<Vec<RunwayState>>>,
+    pub class_membership: Vec<usize>,
+    pub decision_membership: HashMap<isize, isize>,
+    pub states: HashMap<(Vec<usize>,Vec<isize>), BTreeSet<(isize, Vec<isize>)>>,
 }
 
 impl<'a> AlpCompression<'a> {
@@ -54,18 +55,24 @@ impl<'a> AlpCompression<'a> {
         };
         let meta_problem = Alp::new(meta_instance);
 
-        let mut membership = HashMap::new();
-        for (i, j) in clustering.membership.iter().enumerate() {
-            membership.insert(i as isize, *j as isize);
+        let mut decision_membership = HashMap::new();
+        for (i, j) in clustering.membership.iter().copied().enumerate() {
+            for r in 0..problem.instance.nb_runways {
+                decision_membership.insert(
+                    problem.to_decision(&AlpDecision { class: i, runway: r }),
+                    meta_problem.to_decision(&AlpDecision { class: j, runway: r })
+                );
+            }
         }
-        membership.insert(-1, -1);
+        decision_membership.insert(-1, -1);
 
         let states = Self::compute_meta_states(&meta_problem);
 
         AlpCompression {
             problem,
             meta_problem,
-            membership,
+            class_membership: clustering.membership,
+            decision_membership,
             states,
         }
     }
@@ -86,8 +93,8 @@ impl<'a> AlpCompression<'a> {
         meta_separation
     }
 
-    fn compute_meta_states(meta_pb: &Alp) -> HashMap<Vec<usize>, BTreeSet<Vec<RunwayState>>> {
-        let mut map: HashMap<Vec<usize>, BTreeSet<Vec<RunwayState>>> = HashMap::new();
+    fn compute_meta_states(meta_pb: &Alp) -> HashMap<(Vec<usize>,Vec<isize>), BTreeSet<(isize, Vec<isize>)>> {
+        let mut map: HashMap<(Vec<usize>,Vec<isize>), BTreeSet<(isize, Vec<isize>)>> = HashMap::new();
 
         let mut depth = 0;
         let mut current = HashSet::new();
@@ -97,13 +104,24 @@ impl<'a> AlpCompression<'a> {
 
         while let Some(var) = meta_pb.next_variable(depth, &mut current.iter()) {
             for state in current.drain() {
-                match map.entry(state.rem.clone()) {
+                
+                let mut prev_times = vec![];
+                let mut prev_classes = vec![];
+                let mut sum = 0;
+
+                for rs in state.info.iter() {
+                    prev_times.push(rs.prev_time);
+                    prev_classes.push(rs.prev_class);
+                    sum += rs.prev_time;
+                }
+
+                match map.entry((state.rem.clone(), prev_classes)) {
                     Entry::Occupied(mut e) => {
-                        e.get_mut().insert(state.info.clone());
+                        e.get_mut().insert((sum, prev_times));
                     },
                     Entry::Vacant(e) => {
                         let mut set = BTreeSet::new();
-                        set.insert(state.info.clone());
+                        set.insert((sum, prev_times));
                         e.insert(set);
                     },
                 }
@@ -128,25 +146,49 @@ impl<'a> Compression for AlpCompression<'a> {
 
     fn compress(&self, state: &AlpState) -> AlpState {
         let mut rem = vec![0; self.meta_problem.instance.nb_classes];
-        for (c, r) in state.rem.iter().copied().enumerate() {
-            rem[self.membership[&(c as isize)] as usize] += r;
+        for (class, r) in state.rem.iter().copied().enumerate() {
+            rem[self.class_membership[class]] += r;
         }
 
-        let info = state.info.iter().map(|s| RunwayState { prev_time: s.prev_time, prev_class: self.membership[&s.prev_class] }).collect::<Vec<RunwayState>>();
+        let mut prev_times = vec![];
+        let mut prev_classes = vec![];
+        let mut sum = 0;
 
-        match self.states.get(&rem) {
+        for rs in state.info.iter() {
+            prev_times.push(rs.prev_time);
+            if rs.prev_class == -1 {
+                prev_classes.push(-1);
+
+            } else {
+                prev_classes.push(self.class_membership[rs.prev_class as usize] as isize);
+            }
+            sum += rs.prev_time;
+        }
+
+        let key = (rem, prev_classes);
+
+        match self.states.get(&key) {
             Some(infos) => {
-                match infos.range((Unbounded, Included(info))).last() {
-                    Some(precomputed_info) => {
-                        AlpState {
-                            rem,
-                            info: precomputed_info.clone(),
+                let range = infos.range((Unbounded, Included((sum, prev_times))));
+                for (_, precomputed_times) in range.rev() {
+                    let mut dominated = true;
+                    for r in 0..self.problem.instance.nb_runways {
+                        if state.info[r].prev_time < precomputed_times[r] {
+                            dominated = false;
+                            break;
                         }
-                    },
-                    None => AlpState { rem, info: vec![] },
+                    }
+
+                    if dominated {
+                        return AlpState {
+                            rem: key.0,
+                            info: (0..self.problem.instance.nb_runways).map(|r| RunwayState { prev_time: precomputed_times[r], prev_class: key.1[r] }).collect(),
+                        };
+                    }
                 }
+                AlpState { rem: key.0, info: vec![] }
             },
-            None => AlpState { rem, info: vec![] },
+            None => AlpState { rem: key.0, info: vec![] },
         }
     }
 
