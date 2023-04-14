@@ -3,7 +3,7 @@ use std::{fs::File, io::BufReader, time::Duration};
 use clap::Args;
 use ddo::{FixedWidth, TimeBudget, NoDupFringe, MaxUB, ParBarrierSolverFc, Completion, Solver, Problem};
 
-use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision};
+use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision, RunwayState};
 use crate::instance::AlpInstance;
 
 #[derive(Debug, Args)]
@@ -41,19 +41,24 @@ impl Solve {
         println!("is exact {is_exact}");
         println!("best value {best_value}");
 
-        let mut runways = vec![vec![]; problem.instance.nb_runways];
+        let mut runways = vec![(RunwayState {prev_time:-1, prev_class: -1}, vec![]); problem.instance.nb_runways];
         let mut cur = problem.initial_state();
         if let Some(decisions) = solver.best_solution() {
             for decision in decisions {
                 let AlpDecision { class, runway } = problem.from_decision(decision.value);
                 let aircraft = problem.next[class][cur.rem[class]];
                 let arrival = problem.get_arrival_time(&cur.info, aircraft, runway);
-                runways[runway].push((arrival, aircraft));
+                
+                runways[runway].0.prev_time = arrival;
+                runways[runway].0.prev_class = problem.instance.classes[aircraft] as isize;
+                runways[runway].1.push((arrival, aircraft));
+                runways.sort_unstable();
+
                 cur = problem.transition(&cur, decision);
             }
             
             for runway in runways {
-                println!("{:?}", runway);
+                println!("{:?}", runway.1);
             }
         }
     }
