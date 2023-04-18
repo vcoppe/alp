@@ -1,7 +1,7 @@
-use std::{collections::{HashMap, BTreeSet, hash_map::Entry, HashSet}, mem::swap, ops::Bound::*, vec};
+use std::collections::HashMap;
 
 use clustering::{kmeans, Elem};
-use ddo::{Compression, Problem, Decision};
+use ddo::{Compression, Problem, Decision, Dominance};
 
 use crate::instance::AlpInstance;
 
@@ -27,7 +27,6 @@ pub struct AlpCompression<'a> {
     pub meta_problem: Alp,
     pub class_membership: Vec<usize>,
     pub decision_membership: HashMap<isize, isize>,
-    pub states: HashMap<(Vec<usize>,Vec<isize>), BTreeSet<(isize, Vec<isize>)>>,
 }
 
 impl<'a> AlpCompression<'a> {
@@ -66,14 +65,11 @@ impl<'a> AlpCompression<'a> {
         }
         decision_membership.insert(-1, -1);
 
-        let states = Self::compute_meta_states(&meta_problem);
-
         AlpCompression {
             problem,
             meta_problem,
             class_membership: clustering.membership,
             decision_membership,
-            states,
         }
     }
 
@@ -92,49 +88,6 @@ impl<'a> AlpCompression<'a> {
 
         meta_separation
     }
-
-    fn compute_meta_states(meta_pb: &Alp) -> HashMap<(Vec<usize>,Vec<isize>), BTreeSet<(isize, Vec<isize>)>> {
-        let mut map: HashMap<(Vec<usize>,Vec<isize>), BTreeSet<(isize, Vec<isize>)>> = HashMap::new();
-
-        let mut depth = 0;
-        let mut current = HashSet::new();
-        let mut next = HashSet::new();
-
-        current.insert(meta_pb.initial_state());
-
-        while let Some(var) = meta_pb.next_variable(depth, &mut current.iter()) {
-            for state in current.drain() {
-                
-                let mut prev_times = vec![];
-                let mut prev_classes = vec![];
-                let mut sum = 0;
-
-                for rs in state.info.iter() {
-                    prev_times.push(rs.prev_time);
-                    prev_classes.push(rs.prev_class);
-                    sum += rs.prev_time;
-                }
-
-                match map.entry((state.rem.clone(), prev_classes)) {
-                    Entry::Occupied(mut e) => {
-                        e.get_mut().insert((sum, prev_times));
-                    },
-                    Entry::Vacant(e) => {
-                        let mut set = BTreeSet::new();
-                        set.insert((sum, prev_times));
-                        e.insert(set);
-                    },
-                }
-
-                meta_pb.for_each_in_domain(var, &state, &mut |d| { next.insert(meta_pb.transition(&state, d)); });
-            }
-
-            swap(&mut current, &mut next);
-            depth += 1;
-        }
-
-        map
-    }
 }
 
 impl<'a> Compression for AlpCompression<'a> {
@@ -150,49 +103,78 @@ impl<'a> Compression for AlpCompression<'a> {
             rem[self.class_membership[class]] += r;
         }
 
-        let mut prev_times = vec![];
-        let mut prev_classes = vec![];
-        let mut sum = 0;
-
+        let mut info = vec![];
         for rs in state.info.iter() {
-            prev_times.push(rs.prev_time);
             if rs.prev_class == -1 {
-                prev_classes.push(-1);
-
+                info.push(RunwayState { prev_time: rs.prev_time, prev_class: -1 });
             } else {
-                prev_classes.push(self.class_membership[rs.prev_class as usize] as isize);
+                info.push(RunwayState { prev_time: rs.prev_time, prev_class: self.class_membership[rs.prev_class as usize] as isize });
             }
-            sum += rs.prev_time;
         }
 
-        let key = (rem, prev_classes);
-
-        match self.states.get(&key) {
-            Some(infos) => {
-                let range = infos.range((Unbounded, Included((sum, prev_times))));
-                for (_, precomputed_times) in range.rev() {
-                    let mut dominated = true;
-                    for r in 0..self.problem.instance.nb_runways {
-                        if state.info[r].prev_time < precomputed_times[r] {
-                            dominated = false;
-                            break;
-                        }
-                    }
-
-                    if dominated {
-                        return AlpState {
-                            rem: key.0,
-                            info: (0..self.problem.instance.nb_runways).map(|r| RunwayState { prev_time: precomputed_times[r], prev_class: key.1[r] }).collect(),
-                        };
-                    }
-                }
-                AlpState { rem: key.0, info: vec![] }
-            },
-            None => AlpState { rem: key.0, info: vec![] },
-        }
+        AlpState { rem, info }
     }
 
     fn decompress(&self, solution: &Vec<Decision>) -> Vec<Decision> {
         solution.clone()
+    }
+}
+
+#[derive(PartialEq, Eq, Hash)]
+pub struct AlpKey {
+    /// The number of remaining aircrafts to schedule for each class
+    pub rem: Vec<usize>,
+    /// The aircraft class scheduled the latest
+    pub prev_class: Vec<isize>,
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub struct AlpValue {
+    /// The sum of all prev times (negated)
+    pub tot: isize,
+    /// The time of the latest aircraft scheduled (negated)
+    pub prev_times: Vec<isize>,
+}
+
+pub struct AlpDominance;
+impl Dominance for AlpDominance {
+    type State = AlpState;
+    type Key = AlpKey;
+    type Value = AlpValue;
+
+    fn get_key(&self, state: &Self::State) -> Self::Key {
+        AlpKey {
+            rem: state.rem.clone(),
+            prev_class: state.info.iter().map(|i| i.prev_class).collect(),
+        }
+    }
+
+    fn get_value(&self, state: &Self::State) -> Self::Value {
+        let mut tot = 0;
+        let mut prev_times = vec![];
+
+        for i in state.info.iter() {
+            tot -= i.prev_time;
+            prev_times.push(-i.prev_time);
+        }
+
+        AlpValue {
+            tot,
+            prev_times,
+        }
+    }
+
+    fn is_dominated_by(&self, a: &Self::Value, b: &Self::Value) -> bool {
+        if -a.tot < -b.tot {
+            return false;
+        }
+
+        for i in 0..a.prev_times.len() {
+            if -a.prev_times[i] < -b.prev_times[i] {
+                return false;
+            }
+        }
+
+        true
     }
 }

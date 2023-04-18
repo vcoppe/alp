@@ -10,7 +10,7 @@ use ddo::{FixedWidth, TimeBudget, NoDupFringe, MaxUB, ParBarrierSolverFc, Comple
 use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision, RunwayState};
 use crate::instance::AlpInstance;
 
-use super::compression::AlpCompression;
+use super::compression::{AlpCompression, AlpDominance};
 use super::model::AlpState;
 
 #[derive(Debug, Args)]
@@ -36,6 +36,9 @@ pub struct Solve {
     /// Whether to use the compression-based decision heuristic
     #[clap(short='h', long, action)]
     pub compression_heuristic: bool,
+    /// max number of nodes in a layeer
+    #[clap(long, default_value="100")]
+    pub compression_width: usize,
     /// The solver to use
     #[clap(short, long, default_value="classic")]
     pub solver: SolverType,
@@ -66,17 +69,30 @@ impl Display for SolverType {
     }
 }
 
-fn get_relaxation<'a>(compressor: &'a AlpCompression, compression_bound: bool) -> Box<AlpRelax<'a>> {
+fn get_relaxation<'a>(compressor: &'a AlpCompression, compression_bound: bool, width: usize) -> Box<AlpRelax<'a>> {
     if compression_bound {
-        Box::new(AlpRelax::new(compressor.problem.clone(), Some(CompressedSolutionBound::new(compressor))))
+        let relaxation = AlpRelax::new(compressor.meta_problem.clone(), None);
+        Box::new(AlpRelax::new(compressor.problem.clone(), Some(CompressedSolutionBound::new(
+            compressor,
+            &relaxation,
+            width,
+            &AlpDominance
+        ))))
     } else {
         Box::new(AlpRelax::new(compressor.problem.clone(), None))
     }
 }
 
-fn get_heuristic<'a>(compressor: &'a AlpCompression, compression_heuristic: bool) -> Box<dyn DecisionHeuristicBuilder<AlpState> + Send + Sync + 'a> {
+fn get_heuristic<'a>(compressor: &'a AlpCompression, compression_heuristic: bool, width: usize) -> Box<dyn DecisionHeuristicBuilder<AlpState> + Send + Sync + 'a> {
     if compression_heuristic {
-        Box::new(CompressedSolutionHeuristicBuilder::new(compressor, &compressor.decision_membership))
+        let relaxation = AlpRelax::new(compressor.meta_problem.clone(), None);
+        Box::new(CompressedSolutionHeuristicBuilder::new(
+            compressor, 
+            &compressor.decision_membership,
+            &relaxation,
+            width,
+            &AlpDominance
+        ))
     } else {
         Box::new(NoHeuristicBuilder::default())
     }
@@ -130,8 +146,8 @@ impl Solve {
         let problem = Alp::new(instance);
 
         let compressor = AlpCompression::new(&problem, self.n_meta_classes);
-        let relaxation = get_relaxation(&compressor, self.compression_bound);
-        let heuristic = get_heuristic(&compressor, self.compression_heuristic);
+        let relaxation = get_relaxation(&compressor, self.compression_bound, self.compression_width);
+        let heuristic = get_heuristic(&compressor, self.compression_heuristic, self.compression_width);
 
         let width = FixedWidth(self.width);
         let cutoff = TimeBudget::new(Duration::from_secs(self.timeout));

@@ -27,6 +27,8 @@ use ddo::*;
 
 use crate::instance::AlpInstance;
 
+use super::compression::{AlpKey, AlpValue};
+
 /// The state of the DP model
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AlpState {
@@ -200,11 +202,11 @@ impl Problem for Alp {
 /// This structure implements the ALP relaxation
 pub struct AlpRelax<'a> {
     pb: Alp,
-    compression_bound: Option<CompressedSolutionBound<'a, AlpState>>,
+    compression_bound: Option<CompressedSolutionBound<'a, AlpState, AlpKey, AlpValue>>,
 }
 
 impl<'a> AlpRelax<'a> {
-    pub fn new(pb: Alp, compression_bound: Option<CompressedSolutionBound<'a, AlpState>>) -> Self {
+    pub fn new(pb: Alp, compression_bound: Option<CompressedSolutionBound<'a, AlpState, AlpKey, AlpValue>>) -> Self {
 
         Self { pb, compression_bound }
     }
