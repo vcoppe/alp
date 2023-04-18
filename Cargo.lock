@@ -167,7 +167,7 @@ dependencies = [
 [[package]]
 name = "ddo"
 version = "1.0.0"
-source = "git+https://github.com/vcoppe/ddo?branch=compression-relaxed#3d4886494c474a94709affadc3b7cf8963e089be"
+source = "git+https://github.com/vcoppe/ddo?branch=compression-relaxed#0aa063fb8c45d98112d2919ad9a57fc24c0789aa"
 dependencies = [
  "binary-heap-plus",
  "clustering 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",

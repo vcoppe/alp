@@ -173,6 +173,8 @@ impl Solve {
         let duration = start.elapsed();
 
         let best_value = best_value.map(|v| -v).unwrap_or(isize::MAX);
+        let best_bound = - solver.best_upper_bound();
+        let explored = solver.explored();
 
         let mut runways = vec![(RunwayState {prev_time:-1, prev_class: -1}, vec![]); problem.instance.nb_runways];
         let mut cur = problem.initial_state();
@@ -198,7 +200,9 @@ impl Solve {
         println!("===== results  =====");
         println!("is exact   : {is_exact}");
         println!("best value : {best_value}");
+        println!("best bound : {best_bound}");
         println!("duration   : {:.3} seconds", duration.as_secs_f32());
+        println!("explored   : {explored}");
         for runway in runways {
             println!("{:?}", runway.1);
         }
