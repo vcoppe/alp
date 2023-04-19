@@ -150,7 +150,7 @@ impl AlpGenerator {
         let mut latest = vec![];
         let mut last = vec![0; self.nb_classes];
 
-        let rand = Uniform::new(0, 5 * self.avg_interarrival_time);
+        let rand = Uniform::new(0, 20 * self.avg_interarrival_time / self.nb_runways as isize);
 
         for i in 0..self.nb_aircrafts {
             loop {
