@@ -69,9 +69,7 @@ impl Alp {
 
         for i in 0..instance.nb_classes {
             for j in 0..instance.nb_classes {
-                if i != j {
-                    min_separation_to[j] = min_separation_to[j].min(instance.separation[i][j]);
-                }
+                min_separation_to[j] = min_separation_to[j].min(instance.separation[i][j]);
             }
         }
 
