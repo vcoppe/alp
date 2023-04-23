@@ -42,6 +42,7 @@ impl<'a> AlpCompression<'a> {
 
         let classes = Self::compute_meta_classes(problem, &clustering.membership);
         let separation = Self::compute_meta_separation(problem, &clustering.membership, n_meta_classes);
+        let latest = Self::compute_meta_latest(problem, &clustering.membership, n_meta_classes);
 
         let meta_instance = AlpInstance {
             nb_classes: n_meta_classes,
@@ -49,7 +50,7 @@ impl<'a> AlpCompression<'a> {
             nb_runways: problem.instance.nb_runways,
             classes,
             target: problem.instance.target.clone(),
-            latest: problem.instance.latest.clone(),
+            latest,
             separation,
         };
         let meta_problem = Alp::new(meta_instance);
@@ -88,6 +89,19 @@ impl<'a> AlpCompression<'a> {
 
         meta_separation
     }
+
+    fn compute_meta_latest(problem: &Alp, membership: &[usize], n_meta_classes: usize) -> Vec<isize> {
+        let mut latest = vec![0; n_meta_classes];
+        let mut meta_latest = vec![];
+
+        for i in 0..problem.instance.nb_aircrafts {
+            let class = membership[problem.instance.classes[i]];
+            latest[class] = latest[class].max(problem.instance.latest[i]);
+            meta_latest.push(latest[class]);
+        }
+
+        meta_latest
+    }
 }
 
 impl<'a> Compression for AlpCompression<'a> {
@@ -111,6 +125,7 @@ impl<'a> Compression for AlpCompression<'a> {
                 info.push(RunwayState { prev_time: rs.prev_time, prev_class: self.class_membership[rs.prev_class as usize] as isize });
             }
         }
+        info.sort_unstable();
 
         AlpState { rem, info }
     }
