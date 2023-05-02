@@ -200,7 +200,7 @@ impl Problem for Alp {
 /// This structure implements the ALP relaxation
 pub struct AlpRelax<'a> {
     pb: Alp,
-    compression_bound: Option<CompressedSolutionBound<'a, AlpState, AlpKey, AlpValue>>,
+    pub compression_bound: Option<CompressedSolutionBound<'a, AlpState, AlpKey, AlpValue>>,
 }
 
 impl<'a> AlpRelax<'a> {
