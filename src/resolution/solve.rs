@@ -1,9 +1,10 @@
 use std::{fs::File, io::BufReader, time::Duration};
 
 use clap::Args;
-use ddo::{FixedWidth, TimeBudget, NoDupFringe, MaxUB, ParBarrierSolverFc, Completion, Solver, Problem};
+use ddo::{FixedWidth, TimeBudget, NoDupFringe, MaxUB, Completion, Solver, Problem, ParallelSolver, DefaultMDDFC, SimpleBarrier, SimpleDominanceChecker};
 
-use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision, RunwayState};
+use crate::resolution::dominance::AlpDominance;
+use crate::resolution::model::{Alp, AlpRelax, AlpRanking, AlpDecision, RunwayState, AlpState};
 use crate::instance::AlpInstance;
 
 #[derive(Debug, Args)]
@@ -29,11 +30,12 @@ impl Solve {
         let relaxation = AlpRelax::new(problem.clone());
 
         let width = FixedWidth(self.width);
+        let dominance = SimpleDominanceChecker::new(AlpDominance);
         let cutoff = TimeBudget::new(Duration::from_secs(self.timeout));
         let ranking = AlpRanking;
         let mut fringe = NoDupFringe::new(MaxUB::new(&ranking));
 
-        let mut solver = ParBarrierSolverFc::custom(&problem, &relaxation, &ranking, &width, &cutoff, &mut fringe, 1);
+        let mut solver = ParallelSolver::<AlpState, DefaultMDDFC<AlpState>, SimpleBarrier<AlpState>>::custom(&problem, &relaxation, &ranking, &width, &dominance, &cutoff, &mut fringe, 1);
 
         let Completion{best_value, is_exact} = solver.maximize();
 

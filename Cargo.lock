@@ -149,7 +149,7 @@ dependencies = [
 [[package]]
 name = "ddo"
 version = "1.0.0"
-source = "git+https://github.com/xgillard/ddo#390bf90c383f03aba1566ae09dc94bfc57eeac56"
+source = "git+https://github.com/vcoppe/ddo?branch=dominance#505694b26a54711b26b58760cc7d19bd0357ea0e"
 dependencies = [
  "binary-heap-plus",
  "compare",
