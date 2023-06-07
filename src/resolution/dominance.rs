@@ -1,29 +1,44 @@
+use std::{sync::Arc, hash::Hash};
+
 use ddo::Dominance;
 
 use super::model::AlpState;
 
-#[derive(PartialEq, Eq, Hash)]
-pub struct AlpKey {
-    /// The number of remaining aircrafts to schedule for each class
-    pub rem: Vec<usize>,
-    /// The aircraft class scheduled the latest for each runway
-    pub prev_class: Vec<isize>,
+pub struct AlpKey(Arc<AlpState>);
+impl Hash for AlpKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.rem.hash(state);
+        self.0.info.iter().for_each(|i| i.prev_class.hash(state));
+    }
 }
+
+impl PartialEq for AlpKey {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.rem != other.0.rem {
+            return false;
+        }
+        self.0.info.iter()
+            .zip(other.0.info.iter())
+            .all(|(i1, i2)| i1.prev_class == i2.prev_class)
+    }
+}
+
+impl Eq for AlpKey {}
 
 pub struct AlpDominance;
 impl Dominance for AlpDominance {
     type State = AlpState;
     type Key = AlpKey;
 
-    fn get_key(&self, state: &Self::State) -> Option<Self::Key> {
-        Some(AlpKey { rem: state.rem.clone(), prev_class: state.info.iter().map(|i| i.prev_class).collect() })
+    fn get_key(&self, state: Arc<Self::State>) -> Option<Self::Key> {
+        Some(AlpKey(state))
     }
 
-    fn nb_value_dimensions(&self, state: &Self::State) -> usize {
+    fn nb_dimensions(&self, state: &Self::State) -> usize {
         state.info.len()
     }
 
-    fn get_value_at(&self, state: &Self::State, i: usize) -> isize {
+    fn get_coordinate(&self, state: &Self::State, i: usize) -> isize {
         - state.info[i].prev_time
     }
 
